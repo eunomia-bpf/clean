@@ -78,7 +78,16 @@ let rec expr p = function
 
 (* Statements *)
 
-let rec stmt p = function
+(* Long sequences are named in bounded-depth pieces before their function.
+   These definitions only share syntax: no reassociation or semantic change. *)
+let statement_names = ref []
+
+let rec stmt p s =
+  match List.find_opt (fun (node, _) -> node == s) !statement_names with
+  | Some (_, name) -> pp_print_string p name
+  | None -> stmt_body p s
+
+and stmt_body p = function
   | Sskip ->
       fprintf p "Stmt.Sskip"
   | Sassign(e1, e2) ->
@@ -130,7 +139,30 @@ and lblstmts p = function
 
 (* Global definitions *)
 
+let print_statement_parts p prefix body =
+  statement_names := [];
+  let rec visit depth s =
+    let split = depth >= 16 && (match s with Ssequence _ -> true | _ -> false) in
+    let next = if split then 0 else depth + 1 in
+    (match s with
+     | Ssequence (a, b) | Sifthenelse (_, a, b) | Sloop (a, b) ->
+         visit next a; visit next b
+     | Slabel (_, a) -> visit next a
+     | Sswitch (_, cases) -> visit_cases next cases
+     | _ -> ());
+    if split then begin
+      let name = Printf.sprintf "s%s_%d" prefix (List.length !statement_names) in
+      fprintf p "def %s : Stmt :=@ %a@ @ " name stmt_body s;
+      statement_names := (s, name) :: !statement_names
+    end
+  and visit_cases depth = function
+    | LSnil -> ()
+    | LScons (_, s, rest) -> visit depth s; visit_cases depth rest
+  in
+  visit 0 body
+
 let print_function p (id, f) =
+  print_statement_parts p (sanitize (extern_atom id)) f.fn_body;
   fprintf p "def f%s : Function := {@ " (sanitize (extern_atom id));
   fprintf p "  fn_return := %a,@ " typ f.fn_return;
   fprintf p "  fn_callconv := %a,@ " callconv f.fn_callconv;

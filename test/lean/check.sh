@@ -13,15 +13,19 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 export="$root/export"
 
-echo "[1/3] Generating demo.lean with clightgen -lean ..."
-"$root/clightgen" -lean -normalize "$here/demo.c"
+install -d "$export/.lake/build"
 
-echo "[2/3] Building the Lean support libraries (CCLib + Clightdefs) ..."
+echo "[1/4] Generating demo.lean with clightgen -lean ..."
+"$root/clightgen" -lean -normalize -o "$export/.lake/build/Demo_generated.lean" "$here/demo.c"
+
+echo "[2/4] Building the Lean support libraries (CCLib + Clightdefs) ..."
 ( cd "$export" && lake build CCLib Clightdefs )
 
-echo "[3/3] Typechecking the generated file ..."
-cp "$here/demo.lean" "$export/Demo_generated.lean"
-( cd "$export" && LEAN_PATH=.lake/build/lib/lean lean Demo_generated.lean )
-rm -f "$export/Demo_generated.lean"
+echo "[3/4] Typechecking the generated file ..."
+( cd "$export" && LEAN_PATH=.lake/build/lib/lean lean .lake/build/Demo_generated.lean )
 
-echo "OK: demo.lean typechecks."
+echo "[4/4] Exporting and typechecking a long statement sequence ..."
+"$root/clightgen" -lean -normalize -o "$export/.lake/build/Deepseq_generated.lean" "$here/deepseq.c"
+( cd "$export" && LEAN_PATH=.lake/build/lib/lean lean .lake/build/Deepseq_generated.lean )
+
+echo "OK: demo and deepseq exports typecheck."

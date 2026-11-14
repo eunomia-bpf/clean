@@ -60,6 +60,12 @@ The generated `.lean` file is a faithful Lean value of the program's *syntax*.
   [`LEAN.md`](LEAN.md).  Proofs no longer have to invent their own meaning for the
   exported AST (the toy `ClightSem.lean` that once did is superseded).
 
+Long statement sequences use named `Stmt` definitions to keep each emitted term
+within Lean's default elaboration depth. These are syntax aliases: unfolding
+them yields the same statement tree, without reassociating sequences or changing
+control flow. `test/lean/check.sh` includes a long-sequence regression and writes
+its generated files under `export/.lake/build/`.
+
 ### Support library
 
 Generated files start with `import Clightdefs; open CC` and rely on
