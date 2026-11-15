@@ -162,29 +162,48 @@ let print_statement_parts p prefix body =
   in
   visit 0 body
 
-(* Long local lists also reach Lean's code-generator recursion limit. Balanced
-   concatenations denote exactly the original list, with bounded literal depth. *)
-let rec print_locals p locals =
-  let size = List.length locals in
-  if size <= 128 then print_list (print_pair ident typ) p locals
-  else begin
+(* Keep local-list chunks opaque to the code generator as well: concatenations
+   of literal lists can otherwise be folded back into one deeply nested value. *)
+let print_local_parts p prefix locals =
+  let count = ref 0 in
+  let rec parts locals =
+    let size = List.length locals in
+    if size <= 128 then begin
+      let name = Printf.sprintf "l%s_%d" prefix !count in
+      incr count;
+      fprintf p "@@[noinline] def %s : List (Ident × Ty) :=@ %a@ @ "
+        name (print_list (print_pair ident typ)) locals;
+      name
+    end else begin
     let rec split n prefix = function
       | rest when n = 0 -> List.rev prefix, rest
       | head :: rest -> split (n - 1) (head :: prefix) rest
-      | [] -> invalid_arg "print_locals: inconsistent length"
+      | [] -> invalid_arg "print_local_parts: inconsistent length"
     in
     let left, right = split (size / 2) [] locals in
-    fprintf p "@[<hov 1>(%a ++@ %a)@]" print_locals left print_locals right
-  end
+    let left = parts left in
+    let right = parts right in
+    "(" ^ left ^ " ++ " ^ right ^ ")"
+    end
+  in
+  if List.length locals <= 128 then None else Some (parts locals)
 
 let print_function p (id, f) =
-  print_statement_parts p (sanitize (extern_atom id)) f.fn_body;
+  let prefix = sanitize (extern_atom id) in
+  print_statement_parts p prefix f.fn_body;
+  let vars = print_local_parts p (prefix ^ "_vars") f.fn_vars in
+  let temps = print_local_parts p (prefix ^ "_temps") f.fn_temps in
+  let locals p (reference, values) =
+    match reference with
+    | None -> print_list (print_pair ident typ) p values
+    | Some name -> pp_print_string p name
+  in
   fprintf p "def f%s : Function := {@ " (sanitize (extern_atom id));
   fprintf p "  fn_return := %a,@ " typ f.fn_return;
   fprintf p "  fn_callconv := %a,@ " callconv f.fn_callconv;
   fprintf p "  fn_params := %a,@ " (print_list (print_pair ident typ)) f.fn_params;
-  fprintf p "  fn_vars := %a,@ " print_locals f.fn_vars;
-  fprintf p "  fn_temps := %a,@ " print_locals f.fn_temps;
+  fprintf p "  fn_vars := %a,@ " locals (vars, f.fn_vars);
+  fprintf p "  fn_temps := %a,@ " locals (temps, f.fn_temps);
   fprintf p "  fn_body :=@ ";
   stmt p f.fn_body;
   fprintf p "@ }@ @ "

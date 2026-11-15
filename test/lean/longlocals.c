@@ -22,3 +22,11 @@ unsigned many_temporaries(unsigned value)
     REPEAT100(REPEAT10(x += next(value);))
     return x;
 }
+typedef unsigned (*handler)(void *, void *, void *, void *, void *);
+extern handler next_handler(unsigned);
+unsigned many_function_temporaries(unsigned value)
+{
+    unsigned x = value;
+    REPEAT100(REPEAT10(x += next_handler(value)(0, 0, 0, 0, 0);))
+    return x;
+}

@@ -16,4 +16,10 @@ open CC Longlocals
     throw (IO.userError "temporaries changed order or contents")
   unless f_many_temporaries.fn_temps.all (fun v => tyBeq v.2 tuint) do
     throw (IO.userError "temporary type changed")
-  IO.println "1600 local variables and 2001 temporaries retain order and types"
+  unless f_many_function_temporaries.fn_temps.map Prod.fst == temps do
+    throw (IO.userError "function temporaries changed order or contents")
+  let handler := tptr (Ty.Tfunction (List.replicate 5 (tptr tvoid)) tuint cc_default)
+  unless f_many_function_temporaries.fn_temps.zipIdx.all (fun (v, i) =>
+      tyBeq v.2 (if i == 0 || i % 2 == 1 then tuint else handler)) do
+    throw (IO.userError "function temporary type changed")
+  IO.println "1600 variables, 2001 scalar and 2001 mixed temporaries retain order and types"
