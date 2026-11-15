@@ -161,14 +161,29 @@ let print_statement_parts p prefix body =
   in
   visit 0 body
 
+(* Long local lists also reach Lean's code-generator recursion limit. Balanced
+   concatenations denote exactly the original list, with bounded literal depth. *)
+let rec print_locals p locals =
+  let size = List.length locals in
+  if size <= 128 then print_list (print_pair ident typ) p locals
+  else begin
+    let rec split n prefix = function
+      | rest when n = 0 -> List.rev prefix, rest
+      | head :: rest -> split (n - 1) (head :: prefix) rest
+      | [] -> invalid_arg "print_locals: inconsistent length"
+    in
+    let left, right = split (size / 2) [] locals in
+    fprintf p "@[<hov 1>(%a ++@ %a)@]" print_locals left print_locals right
+  end
+
 let print_function p (id, f) =
   print_statement_parts p (sanitize (extern_atom id)) f.fn_body;
   fprintf p "def f%s : Function := {@ " (sanitize (extern_atom id));
   fprintf p "  fn_return := %a,@ " typ f.fn_return;
   fprintf p "  fn_callconv := %a,@ " callconv f.fn_callconv;
   fprintf p "  fn_params := %a,@ " (print_list (print_pair ident typ)) f.fn_params;
-  fprintf p "  fn_vars := %a,@ " (print_list (print_pair ident typ)) f.fn_vars;
-  fprintf p "  fn_temps := %a,@ " (print_list (print_pair ident typ)) f.fn_temps;
+  fprintf p "  fn_vars := %a,@ " print_locals f.fn_vars;
+  fprintf p "  fn_temps := %a,@ " print_locals f.fn_temps;
   fprintf p "  fn_body :=@ ";
   stmt p f.fn_body;
   fprintf p "@ }@ @ "
