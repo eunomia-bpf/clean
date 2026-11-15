@@ -79,6 +79,7 @@ let rec expr p = function
 (* Statements *)
 
 (* Long sequences are named in bounded-depth pieces before their function.
+   Keep the code generator from inlining those pieces back into a deep term.
    These definitions only share syntax: no reassociation or semantic change. *)
 let statement_names = ref []
 
@@ -152,7 +153,7 @@ let print_statement_parts p prefix body =
      | _ -> ());
     if split then begin
       let name = Printf.sprintf "s%s_%d" prefix (List.length !statement_names) in
-      fprintf p "def %s : Stmt :=@ %a@ @ " name stmt_body s;
+      fprintf p "@@[noinline] def %s : Stmt :=@ %a@ @ " name stmt_body s;
       statement_names := (s, name) :: !statement_names
     end
   and visit_cases depth = function

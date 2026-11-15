@@ -30,7 +30,7 @@ echo "[4/5] Exporting and typechecking a long statement sequence ..."
 
 echo "[5/5] Checking long local lists at the default recursion limits ..."
 "$root/clightgen" -lean -normalize -o "$export/.lake/build/Longlocals_generated.lean" "$here/longlocals.c"
-( cd "$export" && LEAN_PATH=.lake/build/lib/lean lean .lake/build/Longlocals_generated.lean -o .lake/build/Longlocals_generated.olean )
+( cd "$export" && LEAN_PATH=.lake/build/lib/lean lean .lake/build/Longlocals_generated.lean -o .lake/build/Longlocals_generated.olean -c .lake/build/Longlocals_generated.c )
 ( cd "$export" && LEAN_PATH=.lake/build:.lake/build/lib/lean lean "$here/longlocals-check.lean" )
 
 echo "OK: demo, deepseq and longlocals exports pass."
