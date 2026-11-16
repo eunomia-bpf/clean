@@ -283,6 +283,7 @@ type atom = positive
 let atom_of_string = (Hashtbl.create 17 : (string, atom) Hashtbl.t)
 let string_of_atom = (Hashtbl.create 17 : (atom, string) Hashtbl.t)
 let next_atom = ref Coq_xH
+let canonical_atom_bound = ref Coq_xH
 let use_canonical_atoms = ref false
 
 (* If [use_canonical_atoms] is false, strings are numbered from 1 up
@@ -293,10 +294,8 @@ let use_canonical_atoms = ref false
    If [use_canonical_atoms] is true, strings are Huffman-encoded as bit
    sequences, which are then encoded as positive numbers.  The same
    string is always represented by the same number in all compilation
-   units.  However, the numbers are bigger than in the first
-   implementation.  Also, this places a hard limit on the number of
-   fresh identifiers that can be generated starting with
-   [first_unused_ident]. *)
+   units.  Fresh identifiers start above all named atoms in this unit,
+   so normalization can allocate arbitrarily many consecutive temporaries. *)
 
 let rec append_bits_pos nbits n p =
   if nbits <= 0 then p else
@@ -340,6 +339,8 @@ let intern_string s =
       if !use_canonical_atoms then pos_of_string s else fresh_atom () in
     Hashtbl.add atom_of_string s a;
     Hashtbl.add string_of_atom a s;
+    if not (P.lt a !canonical_atom_bound) then
+      canonical_atom_bound := P.succ a;
     a
 
 let extern_atom a =
@@ -348,31 +349,11 @@ let extern_atom a =
   with Not_found ->
     Printf.sprintf "$%d" (P.to_int a)
 
-(* Ignoring the terminating "1" bit, canonical encodings of strings can
-   be viewed as lists of bits, formed by concatenation of 6-bit fragments
-   (for letters, numbers, and underscore) and 14-bit fragments (for other
-   characters).  Hence, not all positive numbers are canonical encodings:
-   only those whose log2 is of the form [6n + 14m].
-
-   Here are the first intervals of positive numbers corresponding to strings:
-   - [1, 1] for the empty string
-   - [2^6, 2^7-1] for one "compact" character
-   - [2^12, 2^13-1] for two "compact" characters
-   - [2^14, 2^14-1] for one "escaped" character
-
-   Hence, between 2^7 and 2^12 - 1, we have 3968 consecutive positive
-   numbers that cannot be the encoding of a string.  These are the positive
-   numbers we'll use as temporaries in the SimplExpr pass if canonical
-   atoms are in use.
-
-   If short atoms are used, we just number the temporaries consecutively
-   starting one above the last generated atom.
-*)
-
+(* Canonical temporaries start above all named atoms.  A fixed gap in the
+   encoding (formerly 128--4095) is insufficient for large functions:
+   continuing beyond that gap aliases named identifiers. *)
 let first_unused_ident () =
-  if !use_canonical_atoms
-  then P.of_int 128
-  else !next_atom
+  if !use_canonical_atoms then !canonical_atom_bound else !next_atom
 
 (* Floats *)
 

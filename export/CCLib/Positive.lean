@@ -81,27 +81,25 @@ end Positive
 
 /-! ## Encoding character strings as identifiers
 
-Mirror of `ident_of_string` / `append_char_pos` in `export/Ctypesdefs.v`.  We
-use the general 8-bit encoding for every character (Rocq special-cases the
-common ones for shorter numbers); it is injective and self-consistent, which is
-all a standalone Lean mirror needs. -/
+Mirror of `ident_of_string` / `append_char_pos` in `export/Ctypesdefs.v`
+and `Camlcoq.pos_of_string`. Compact ASCII letters, digits and underscore use
+six bits; other byte characters use the escaped fourteen-bit encoding. Named
+atoms and numeric temporaries must share the exact CompCert identifier space. -/
 
 private def appendBit (b : Bool) (p : Positive) : Positive :=
   if b then Positive.xI p else Positive.xO p
 
-private def nthBit (n i : Nat) : Bool := (n >>> i) &&& 1 == 1
+private def appendBits : Nat → Nat → Positive → Positive
+  | 0, _, p => p
+  | width + 1, n, p => appendBit (n &&& 1 == 1) (appendBits width (n >>> 1) p)
 
 private def appendCharPos (c : Char) (p : Positive) : Positive :=
   let n := c.toNat
-  let p := appendBit (nthBit n 7) p
-  let p := appendBit (nthBit n 6) p
-  let p := appendBit (nthBit n 5) p
-  let p := appendBit (nthBit n 4) p
-  let p := appendBit (nthBit n 3) p
-  let p := appendBit (nthBit n 2) p
-  let p := appendBit (nthBit n 1) p
-  let p := appendBit (nthBit n 0) p
-  .xI (.xI (.xI (.xI (.xI (.xI p)))))
+  if 48 ≤ n ∧ n ≤ 57 then appendBits 6 (n - 48) p
+  else if 97 ≤ n ∧ n ≤ 122 then appendBits 6 (n - 87) p
+  else if 65 ≤ n ∧ n ≤ 90 then appendBits 6 (n - 29) p
+  else if n == 95 then appendBits 6 62 p
+  else .xI (.xI (.xI (.xI (.xI (.xI (appendBits 8 n p))))))
 
 /-- Encode a character string as an identifier (`ident_of_string`).
 
