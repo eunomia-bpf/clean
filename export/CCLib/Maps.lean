@@ -131,6 +131,76 @@ theorem gso (i j : Positive) (v : A) (m : PTree A) (h : i ≠ j) :
       have hne : ii ≠ jj := fun hh => h (by rw [hh])
       cases m <;> simp [get, set, ih jj _ hne]
 
+private theorem elemsAux_forall (P : A → Prop) (m : PTree A)
+    (path : List Bool) (acc : List (Positive × A))
+    (hm : ∀ i v, get i m = some v → P v)
+    (ha : ∀ p ∈ acc, P p.2) : ∀ p ∈ elemsAux m path acc, P p.2 := by
+  induction m generalizing path acc with
+  | Leaf => exact ha
+  | Node l o r ihl ihr =>
+    apply ihl (false :: path) _ (fun i v h => hm (.xO i) v h)
+    have hr := ihr (true :: path) acc (fun i v h => hm (.xI i) v h) ha
+    cases o with
+    | none => exact hr
+    | some v =>
+      intro p hp
+      rcases List.mem_cons.mp hp with hp | hp
+      · subst p; exact hm .xH v rfl
+      · exact hr p hp
+
+/-- A property of every successful lookup holds for every enumerated value. -/
+theorem forall_elements_of_get (P : A → Prop) (m : PTree A)
+    (h : ∀ i v, get i m = some v → P v) : ∀ p ∈ elements m, P p.2 :=
+  elemsAux_forall P m [] [] h (by intro p hp; cases hp)
+
+private theorem elemsAux_pairwise (R : A → A → Prop) (m : PTree A)
+    (path : List Bool) (acc : List (Positive × A))
+    (hm : ∀ i j v w, get i m = some v → get j m = some w → i ≠ j → R v w)
+    (ha : acc.Pairwise (fun (p q : Positive × A) => R p.2 q.2))
+    (hc : ∀ i v, get i m = some v → ∀ p ∈ acc, R v p.2) :
+    (elemsAux m path acc).Pairwise (fun (p q : Positive × A) => R p.2 q.2) := by
+  induction m generalizing path acc with
+  | Leaf => exact ha
+  | Node l o r ihl ihr =>
+    have hr := ihr (true :: path) acc
+      (fun i j v w hi hj hij => hm (.xI i) (.xI j) v w hi hj
+        (fun he => hij (Positive.xI.inj he))) ha
+      (fun i v hi => hc (.xI i) v hi)
+    have ho : (match o with
+        | some v => (keyOfRevPath path, v) :: elemsAux r (true :: path) acc
+        | none => elemsAux r (true :: path) acc).Pairwise
+        (fun (p q : Positive × A) => R p.2 q.2) := by
+      cases o with
+      | none => exact hr
+      | some v =>
+        apply List.Pairwise.cons _ hr
+        exact elemsAux_forall (R v) r (true :: path) acc
+          (fun i w hi => hm .xH (.xI i) v w rfl hi (by intro he; cases he))
+          (hc .xH v rfl)
+    simp only [elemsAux]
+    apply ihl (false :: path) _
+      (fun i j v w hi hj hij => hm (.xO i) (.xO j) v w hi hj
+        (fun he => hij (Positive.xO.inj he))) ho
+    intro i v hi
+    have hright := elemsAux_forall (R v) r (true :: path) acc
+      (fun j w hj => hm (.xO i) (.xI j) v w hi hj (by intro he; cases he))
+      (hc (.xO i) v hi)
+    cases o with
+    | none => exact hright
+    | some w =>
+      intro p hp
+      rcases List.mem_cons.mp hp with hp | hp
+      · subst p
+        exact hm (.xO i) .xH v w hi rfl (by intro he; cases he)
+      · exact hright p hp
+
+/-- Relations between values at different keys are retained by enumeration.
+In particular, injective block-valued environments enumerate distinct blocks. -/
+theorem pairwise_elements_of_get (R : A → A → Prop) (m : PTree A)
+    (h : ∀ i j v w, get i m = some v → get j m = some w → i ≠ j → R v w) :
+    (elements m).Pairwise (fun (p q : Positive × A) => R p.2 q.2) :=
+  elemsAux_pairwise R m [] [] h .nil (by intro i v hi p hp; cases hp)
+
 end PTree
 
 /-! ## `PMap` — total maps keyed by `positive` (a default plus a `PTree`) -/
